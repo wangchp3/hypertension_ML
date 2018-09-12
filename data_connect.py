@@ -81,8 +81,6 @@ class Db:
             columns = [column[0] for column in cursor.description]
             data = cursor.fetchall()
             df = pd.DataFrame.from_records(dict(zip(columns, datarow)) for datarow in data)
-            print(df.shape,df.MASTER_INDEX.unique(),df.describe())
-            print(df.info())
             return df
         except Exception:
             raise
