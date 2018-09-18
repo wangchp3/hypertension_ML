@@ -16,10 +16,7 @@ print(involve_patient.columns)
 
 
 #获取单纯性高血压患者的其他信息
-
-
 # 删除不需要的列
-
 def picture_age(data):
     """
     描述数据中的年龄分布，分层分析，根据
