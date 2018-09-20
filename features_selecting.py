@@ -5,6 +5,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn import decomposition
+from scipy.stats import ttest_ind
 
 
 class DataPCA:

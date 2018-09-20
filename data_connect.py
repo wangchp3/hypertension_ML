@@ -80,6 +80,8 @@ class Db:
             cursor.execute(sql, *args)
             columns = [column[0] for column in cursor.description]
             data = cursor.fetchall()
+            import sys
+            print('data的大小：{}'.format(sys.getsizeof(data)))
             df = pd.DataFrame.from_records(dict(zip(columns, datarow)) for datarow in data)
             return df
         except Exception:
@@ -119,7 +121,7 @@ class Db:
             rowscount = cursor.executemany(sql, *args)
             if not self.has_transaction:
                 self.commit()
-            return rowscount
+            return rowscount.rowcount
         except Exception:
             raise
         finally:
