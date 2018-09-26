@@ -1,15 +1,17 @@
 # encoding utf-8
 # from test
-import pandas as pd
-
-from data_connect import Db
-from time_and_memory_use import time_use
-import common
 import pickle
 import re
 
+import pandas as pd
+
+import common
+from data_connect import Db
+from time_and_memory_use import time_use,total_size
+
 all_name = pd.read_csv(r"F:\wcp\DM\all_name.csv", encoding='utf-8')
 pattern = re.compile('^[\(（].*?[\)）]+')
+
 
 # 做法包括以下几个：
 ## 先将未发生高血压的患者分类分出来
@@ -111,7 +113,8 @@ class Dataclean:
         # patient_diag.set_index(['MASTER_INDEX', 'DIAG_TIME'], inplace=True)
         # all_patients = patient_diag[patient_diag.index.isin(index_diag)]
         # all_patients.reset_index(inplace=True)
-        all_patients = all_patients_diag.merge(patient_diag, on=['MASTER_INDEX', 'DIAG_TIME'], how='left', sort=False)  #检查是否有重复
+        all_patients = all_patients_diag.merge(patient_diag, on=['MASTER_INDEX', 'DIAG_TIME'], how='left',
+                                               sort=False)  # 检查是否有重复
 
         self.print_results("诊断含心血管疾病字段的人数", len(all_patients))
 
@@ -139,11 +142,12 @@ class Dataclean:
         patient_diag_time.dropna(subset=['DIAG_TIME'], inplace=True)
         all_patients_diag_time = patient_diag_time.groupby(['MASTER_INDEX2'], as_index=False)['DIAG_TIME'].max()
 
-        all_patients_diag_time = all_patients_diag_time.merge(patient_diag_time, on=['MASTER_INDEX2','DIAG_TIME'])
-        all_patients_diag_time.rename(columns={"MASTER_INDEX2": "MASTER_INDEX","DIAG_TIME": "DIAG_TIME_y", "DISEASE_NAME": "DISEASE_NAME_y"},
-                                      inplace=True)
+        all_patients_diag_time = all_patients_diag_time.merge(patient_diag_time, on=['MASTER_INDEX2', 'DIAG_TIME'])
+        all_patients_diag_time.rename(
+            columns={"MASTER_INDEX2": "MASTER_INDEX", "DIAG_TIME": "DIAG_TIME_y", "DISEASE_NAME": "DISEASE_NAME_y"},
+            inplace=True)
         all_patients_diag_time = all_patients_diag_time[["MASTER_INDEX", "DIAG_TIME_y", "DISEASE_NAME_y"]]
-        all_patients_diag_time.set_index("MASTER_INDEX",inplace=True)
+        all_patients_diag_time.set_index("MASTER_INDEX", inplace=True)
         return all_patients_diag_time
 
     def contains_c_class_medication(self):
@@ -159,10 +163,16 @@ class Dataclean:
         time_totake_medicine = pd.read_sql(sql_find_index_time, conn)
         time_totake_medicine['MASTER_INDEX2'] = time_totake_medicine['MASTER_INDEX2'].apply(int)
         time_totake_medicine.to_pickle('time_totake_medicine.pickle')
+
+    def clean_contains_c_class_medication(self):
         # 剔除C01，C10,C11类
-        time_totake_medicine.dropna(subset=['CHARGE_TIME'], inplace=True)
+        with open('time_totake_medicine.pickle','rb') as pic_file:
+            time_totake_medicine = pickle.load(pic_file)
+            print('内存占用大小：\n{}'.format(total_size(time_totake_medicine)))
+            time_totake_medicine.dropna(subset=['CHARGE_TIME'], inplace=True)
         time_totake_medicine.rename(columns={'MASTER_INDEX2': 'MASTER_INDEX'}, inplace=True)
-        time_totake_medicine.drop(time_totake_medicine[time_totake_medicine.ATC_CODE.apply(lambda x: x.strip()[:3].__contains__('1'))].index.tolist(),inplace=True)
+        time_totake_medicine.drop(time_totake_medicine[time_totake_medicine.ATC_CODE.apply(
+            lambda x: x.strip()[:3].__contains__('1'))].index.tolist(), inplace=True)
 
         time_totake_medicine_grouped = time_totake_medicine.groupby('MASTER_INDEX', as_index=False)['CHARGE_TIME'].min()
 
@@ -180,7 +190,7 @@ class Dataclean:
         # 合并数据
         all_patient_with_cvd = all_patient_with_cvd[['MASTER_INDEX', 'DIAG_TIME', 'DISEASE_NAME']]
 
-        c_class= c_class[['MASTER_INDEX','CHARGE_TIME']]
+        c_class = c_class[['MASTER_INDEX', 'CHARGE_TIME']]
         c_class.set_index(['MASTER_INDEX'], inplace=True)
 
         involve_patient = pd.merge(left=all_patients_with_hp, right=all_patient_with_cvd, how='left', on='MASTER_INDEX',
@@ -188,7 +198,8 @@ class Dataclean:
 
         involve_patient.set_index(['MASTER_INDEX'], inplace=True)
 
-        print('差集：\n', set(all_patient_with_cvd.index.tolist())-(set(all_patients_with_hp.index.tolist())|set(all_patients_with_hp.index.tolist())))
+        print('差集：\n', set(all_patient_with_cvd.index.tolist()) - (
+                    set(all_patients_with_hp.index.tolist()) | set(all_patients_with_hp.index.tolist())))
         # 删除妊娠高血压以及难治性高血压患者
         involve_patient.drop(out_all_hp, axis=0, inplace=True)
 
@@ -203,8 +214,9 @@ class Dataclean:
         involve_patient = involve_patient.combine_first(patients_diag_time)
 
         # 比较两个诊断日期的大小，确定入组的人群，并画出人群年龄/性别等基本分布,以及缺失值情况，及最近一次就诊时间
-        involve_patient['time_delta'] = involve_patient['DIAG_TIME_y'].apply(str).apply(lambda x: common.parse_ymd(x)) - involve_patient[
-            'DIAG_TIME_x'].apply(str).apply(lambda x: common.parse_ymd(x))
+        involve_patient['time_delta'] = involve_patient['DIAG_TIME_y'].apply(str).apply(lambda x: common.parse_ymd(x)) - \
+                                        involve_patient[
+                                            'DIAG_TIME_x'].apply(str).apply(lambda x: common.parse_ymd(x))
         involve_patient['time_delta'] = involve_patient['time_delta'].apply(lambda x: x.days)
         f = lambda x: -1 if x < 1 else 1
         involve_patient['time_label'] = involve_patient['time_delta'].apply(f)
@@ -230,7 +242,7 @@ class Dataclean:
         FROM [dbo].[INPAT_FEE] WHERE I_TYPE_NAME like '%药费%'))tb"""
         medications = self.db.get_dict_list(sql_find_patient_atc)
         medications.dropna(subset=['ITEM_NAME'], inplace=True)
-        medications['ITEM_NAME'] = medications['ITEM_NAME'].apply(lambda s:pattern.sub('', s))
+        medications['ITEM_NAME'] = medications['ITEM_NAME'].apply(lambda s: pattern.sub('', s))
         medications.to_pickle('medications.pickle')
 
     @staticmethod
@@ -273,9 +285,10 @@ class Dataclean:
         :return:
         """
         with open("medication_clean.pickle", 'rb') as pic_file:
-            medications_clean=pickle.load(pic_file)
+            medications_clean = pickle.load(pic_file)
         medications_clean.dropna(subset=['atc'], inplace=True)
-        medications = [(value.atc, value.standardize_name, '%'+value.origin_name+'%') for i,value in medications_clean.iterrows()]
+        medications = [(value.atc, value.standardize_name, '%' + value.origin_name + '%') for i, value in
+                       medications_clean.iterrows()]
         # for i, value in medications_clean.iterrows():
         sql = """update [dbo].[DIC_DRUG_ATC_NEW] set ATC_CODE = ?,I_ITEM_NAME = ? where ATC_CODE is null and ITEM_NAME like ? """
         rows = self.db.exec_many(sql, medications)
@@ -287,8 +300,8 @@ class Dataclean:
         高血压I级，高血压2级，高血压3级，原发性高血压，继发性高血压。可以通过value_counts得到所有的高血压诊断，但是先对所有字段两端除掉空白字段
         :return:
         """
-        data['DISEASE_NAME_hp'] = data.DISEASE_NAME_x.str.strip().str.replace('?','').str.replace('？', '')
-        data['DISEASE_NAME_cvd'] = data.DISEASE_NAME_y.str.strip().str.replace('?','').str.replace('？', '')
+        data['DISEASE_NAME_hp'] = data.DISEASE_NAME_x.str.strip().str.replace('?', '').str.replace('？', '')
+        data['DISEASE_NAME_cvd'] = data.DISEASE_NAME_y.str.strip().str.replace('?', '').str.replace('？', '')
         self.print_results("diagnose classification", data['DISEASE_NAME_x'].value_counts())
         return
 
@@ -303,7 +316,6 @@ class Dataclean:
             involve_patient = pickle.load(pic_file2)
 
         c_class_involve = c_class[c_class.MASTER_INDEX2.isin(involve_patient.MASTER_INDEX)]
-
 
         return
 
@@ -337,7 +349,6 @@ class Dataclean:
 
 
 if __name__ == "__main__":
-
     hp = Dataclean()
     # 先将药品名称全部清洗，并更新到数据库中
     # hp.medicine_name_clean()
@@ -349,6 +360,7 @@ if __name__ == "__main__":
     # hp_patients = hp.define_patients_with_hp()
     # cvd_patients = hp.define_patients_with_cvd()
     # out_all_hp = hp.distinct_hp()
-    c_class = hp.contains_c_class_medication()
+    # c_class = hp.contains_c_class_medication()
+    hp.clean_contains_c_class_medication()
     # involve_patient = hp.define_patients(hp_patients, cvd_patients, out_all_hp, c_class)
     # hp.clean_diagnose(involve_patient)
